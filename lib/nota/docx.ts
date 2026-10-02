@@ -2,6 +2,7 @@ import {
   BLANCO,
   conBlancos,
   fechaLarga,
+  firmaLaDIA,
   lineaCargoFirma,
   lineasDeDatos,
   lineasDestinatario,
@@ -70,6 +71,15 @@ export async function descargarDocx(
   } catch {
     logo = null;
   }
+  // Logo de la Dirección de IA (526 × 220 px), sólo en las notas que firma la Dirección.
+  let logoDIA: ArrayBuffer | null = null;
+  if (firmaLaDIA(enc.remitenteArea)) {
+    try {
+      logoDIA = await (await fetch("/logo-ia.png")).arrayBuffer();
+    } catch {
+      logoDIA = null;
+    }
+  }
 
   const sinBordes = {
     top: { style: d.BorderStyle.NONE, size: 0, color: "FFFFFF" },
@@ -120,6 +130,21 @@ export async function descargarDocx(
                 : []),
             ],
           }),
+          ...(logoDIA
+            ? [
+                new d.TableCell({
+                  width: { size: mm(34), type: d.WidthType.DXA },
+                  borders: sinBordes,
+                  verticalAlign: d.VerticalAlign.CENTER,
+                  children: [
+                    new d.Paragraph({
+                      alignment: d.AlignmentType.RIGHT,
+                      children: [new d.ImageRun({ type: "png", data: logoDIA, transformation: { width: 108, height: 45 } })],
+                    }),
+                  ],
+                }),
+              ]
+            : []),
         ],
       }),
     ],
