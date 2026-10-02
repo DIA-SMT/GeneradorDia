@@ -19,7 +19,7 @@ export const ESQUEMA_NOTA = {
     referencia: {
       type: "string",
       description:
-        "Asunto de la nota en una línea, sin el prefijo 'Referencia:'. Sustantivo + objeto concreto, hasta 15 palabras.",
+        "Asunto de la nota en una línea, para el asunto del correo y el título del archivo (no se imprime en la nota). Sin el prefijo 'Referencia:' ni marcadores. Sustantivo + objeto concreto, hasta 15 palabras.",
     },
     cuerpo: {
       type: "array",

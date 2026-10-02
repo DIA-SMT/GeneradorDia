@@ -148,4 +148,25 @@ body {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+  /* Sin animaciones al imprimir: un color en transición se imprimiría a medio camino. */
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+  /* Un dato que no se completó se imprime como línea en blanco, nunca resaltado (también con Ctrl+P). */
+  .marcador {
+    font-size: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  .marcador::after {
+    content: "________________";
+    font-family: var(--font-nota);
+    font-size: 12pt;
+    font-weight: 400;
+    color: #000;
+  }
 }

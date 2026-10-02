@@ -26,12 +26,20 @@ derivaciones, dictámenes básicos, solicitudes, respuestas y circulares. Direcc
   (tipo, destinatario, quién firma, contenido, tono). La persona revisa y recién después redacta.
 - **Micrófono en el campo principal** para dictar directo al texto, sin IA de por medio.
 - **Estructura oficial de las notas de la Municipalidad** (la misma del generador anterior): fecha arriba a la
-  derecha; destinatario en negrita (nombre, área y «De la Municipalidad de San Miguel de Tucumán»); expediente y
-  referencia; apertura «En mi carácter de…, me dirijo a usted a fin de…»; cierre «Sin otro particular, quedo a
-  disposición y lo/la saludo atentamente.»; firma a la izquierda con «Cargo - Área». La IA escribe sólo la
-  referencia, el cuerpo y el cierre; el destinatario, la fecha, el expediente y la firma salen del formulario.
+  derecha; destinatario en negrita (nombre, área y «De la Municipalidad de San Miguel de Tucumán»); número de nota
+  y expediente si los hay; apertura «En mi carácter de…, me dirijo a usted a fin de…»; cierre «Sin otro
+  particular, quedo a disposición y lo/la saludo atentamente.»; firma a la izquierda con «Cargo - Área». Sin línea
+  de referencia. La IA escribe sólo el cuerpo y el cierre (y un asunto que se usa para el correo); el
+  destinatario, la fecha, el expediente y la firma salen del formulario.
+- **Prompt de sistema** en dos partes: la voz y el criterio de redacción definidos por la Dirección
+  (`lib/ia/prompt-base.ts`, se edita libremente) y las instrucciones de funcionamiento de la aplicación
+  (`lib/ia/prompt-sistema.ts`).
+- **Datos para completar:** la IA marca sólo lo indispensable (un número de expediente, un plazo, una norma); lo
+  demás lo redacta en forma general. Se completan tocando lo resaltado en la hoja, desde el panel o desde el aviso
+  que aparece antes de exportar. En el Word, el PDF, el texto y el correo nunca sale el amarillo: lo que quede sin
+  completar sale como una línea en blanco.
 - **Redacción con razonamiento**, hoja A4 con membrete, panel de revisión (datos faltantes y riesgos legales),
-  edición a mano y ajustes con IA («más breve», «agregá que…»).
+  botón «Editar nota» arriba de la hoja y ajustes con IA («más breve», «agregá que…»).
 - **Salida:** Word con membrete, impresión / PDF, copiar, y correo (abre Gmail u otro programa con la nota en el cuerpo).
 
 El dictado usa el reconocimiento de voz del navegador (Chrome y Edge; en Firefox no aparece). Esos navegadores
@@ -76,7 +84,8 @@ Alcanza con una de las dos claves. Si están las dos, se usa Anthropic directo s
 ## Dónde está cada cosa
 
 ```
-lib/ia/prompt-sistema.ts    El prompt de sistema: reglas, estilo, formato de salida
+lib/ia/prompt-base.ts       El prompt base de la Dirección: voz y criterio de redacción
+lib/ia/prompt-sistema.ts    Prompt base + cómo funciona la app: estructura, formato, datos a completar
 lib/ia/guias-por-tipo.ts    Qué exige cada tipo de nota (elementos obligatorios, estructura, cuidados)
 lib/ia/marco-normativo.ts   Normas que la IA puede citar (VACÍO: lo carga Asesoría Letrada)
 lib/ia/esquema.ts           Esquema JSON que la API impone a la respuesta

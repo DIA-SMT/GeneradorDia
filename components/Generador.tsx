@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { CompletarDatos } from "@/components/CompletarDatos";
 import { CompletarDictando } from "@/components/CompletarDictando";
 import { Encabezado } from "@/components/Encabezado";
 import { Formulario, type CambiarDatos } from "@/components/Formulario";
@@ -25,6 +26,8 @@ import { Progreso } from "@/components/Progreso";
 import { abrirCorreo, correoValido, enlaceGmail, enlaceMailto, imprimirComo } from "@/lib/nota/correo";
 import { descargarDocx, nombreArchivo } from "@/lib/nota/docx";
 import {
+  completarDato,
+  conBlancos,
   faltantesPendientes,
   hoyArgentina,
   lineasDestinatario,
@@ -57,6 +60,9 @@ const VACIO: DatosNota = {
 
 const AJUSTES_RAPIDOS = ["Más breve", "Más firme", "Más cordial", "Lenguaje más simple", "Más detallada"];
 
+const AJUSTE_SIN_FALTANTES =
+  "Quien firma no tiene los datos marcados para completar. Quitá todos los marcadores [[COMPLETAR: …]]: reformulá cada frase en forma general, sin el dato y sin inventarlo, o quitá la oración si sin el dato no tiene sentido. Una norma que falta no se reemplaza por \"la normativa vigente\", \"las normas aplicables\" ni fórmulas parecidas: quitá la referencia y, si sin ella no se sostiene una habilitación o un apercibimiento, quitá también esa afirmación. Si sacar un dato debilita la nota, hacelo igual y explicalo en las advertencias con nivel \"alta\". No cambies el resto.";
+
 const AJUSTE_DATOS_NUEVOS =
   "Cambiaron el destinatario o quien firma: actualizá la apertura, el cierre y toda mención a ellos según los datos actuales. No cambies el resto.";
 
@@ -70,6 +76,16 @@ function clavePersonas(d: DatosNota): string {
 }
 
 type Vista = "datos" | "nota";
+
+type Exportacion = "copiar" | "word" | "imprimir" | "gmail" | "correo";
+
+const NOMBRE_EXPORTACION: Record<Exportacion, string> = {
+  copiar: "copiar la nota",
+  word: "descargar el Word",
+  imprimir: "imprimir o guardar el PDF",
+  gmail: "abrir el correo",
+  correo: "abrir el correo",
+};
 
 type Estado =
   | { tipo: "inicial" }
@@ -102,6 +118,7 @@ export default function Generador() {
   const [nota, setNota] = useState<NotaGenerada | null>(null);
   const [notaIA, setNotaIA] = useState<NotaGenerada | null>(null);
   const [personasDeLaNota, setPersonasDeLaNota] = useState<string | null>(null);
+  const [porExportar, setPorExportar] = useState<Exportacion | null>(null);
   const [editando, setEditando] = useState(false);
   const [instruccion, setInstruccion] = useState("");
   const [copiado, setCopiado] = useState(false);
@@ -111,6 +128,14 @@ export default function Generador() {
   const [paraAuto, setParaAuto] = useState("");
   const cancelador = useRef<AbortController | null>(null);
   const corridas = useRef(0);
+
+  // Si se imprime con Ctrl+P en modo edición, se sale del modo antes de armar la página:
+  // si no, saldrían los recuadros de edición con los datos sin completar tal cual.
+  useEffect(() => {
+    const antesDeImprimir = () => flushSync(() => setEditando(false));
+    window.addEventListener("beforeprint", antesDeImprimir);
+    return () => window.removeEventListener("beforeprint", antesDeImprimir);
+  }, []);
 
   useEffect(() => {
     fetch("/api/funcionarios")
@@ -242,6 +267,39 @@ export default function Generador() {
     remitenteArea: datos.remitenteArea,
   };
 
+  /** Completa un dato faltante en toda la nota (desde la hoja, el panel o el aviso antes de exportar). */
+  function completarUnDato(dato: string, valor: string) {
+    // Mientras la IA reescribe, lo completado se perdería al llegar su respuesta.
+    if (estado.tipo === "generando") return;
+    setNota((n) => (n ? completarDato(n, dato, valor) : n));
+  }
+
+  function ejecutar(accion: Exportacion) {
+    if (!nota) return;
+    if (accion === "copiar") void copiar();
+    else if (accion === "word") void descargarDocx(nota, { ...enc, tipoNombre: nombreTipo(datos.tipo) });
+    else if (accion === "imprimir") imprimir();
+    else enviarCorreo(accion === "gmail" ? "gmail" : "otro");
+  }
+
+  /**
+   * Toda salida (Word, PDF, copia, correo) pasa por acá: si quedan datos sin
+   * completar, primero se avisa y se ofrece completarlos. En el producto final
+   * nunca sale el amarillo: lo que quede sin completar sale como línea en blanco.
+   */
+  function exportar(accion: Exportacion) {
+    if (pendientes > 0) setPorExportar(accion);
+    else ejecutar(accion);
+  }
+
+  function continuarExportacion() {
+    const accion = porExportar;
+    if (!accion) return;
+    // Se cierra el aviso antes de imprimir o copiar (sigue siendo el mismo clic, que el navegador exige).
+    flushSync(() => setPorExportar(null));
+    ejecutar(accion);
+  }
+
   async function copiar() {
     if (!nota) return;
     try {
@@ -261,10 +319,11 @@ export default function Generador() {
 
   function enviarCorreo(via: "gmail" | "otro") {
     if (!nota) return;
-    const referencia = nota.referencia.trim();
-    const asunto = referencia
-      ? `Referencia: ${referencia}`
-      : [nombreTipo(datos.tipo), datos.numeroNota.trim() || datos.expediente.trim()].filter(Boolean).join(" ");
+    const referencia = conBlancos(nota.referencia).trim();
+    // El asunto que escribió la IA (no se imprime en la nota) sirve como asunto del correo.
+    const asunto =
+      referencia ||
+      [nombreTipo(datos.tipo), datos.numeroNota.trim() || datos.expediente.trim()].filter(Boolean).join(" ");
     const cuerpo = notaComoTexto(nota, enc);
     if (via === "gmail") abrirCorreo(enlaceGmail(para.trim(), asunto, cuerpo), true);
     else abrirCorreo(enlaceMailto(para.trim(), asunto, cuerpo), false);
@@ -278,6 +337,9 @@ export default function Generador() {
   const desactualizada =
     Boolean(nota) && !generando && personasDeLaNota !== null && personasDeLaNota !== clavePersonas(datos);
   const pendientes = nota ? faltantesPendientes(nota, lineasArmadas).length : 0;
+  // Los que escribió la IA (sin contar el destinatario, que sale del formulario): sólo esos los puede resolver ella.
+  const pendientesDeLaIA = nota ? faltantesPendientes(nota).length : 0;
+  const soloFaltaDestinatario = pendientes > 0 && pendientesDeLaIA === 0;
   const paraValido = para.trim() === "" || correoValido(para);
 
   const avisoError = estado.tipo === "error" && (
@@ -353,8 +415,53 @@ export default function Generador() {
               )}
               {nota && (
                 <>
-                  <div className={`zona-hoja rounded-xl bg-slate-200/60 p-3 transition sm:p-6 ${generando ? "opacity-40" : ""}`}>
-                    <HojaNota nota={nota} enc={enc} editando={editando} alCambiar={setNota} />
+                  {/* Barra de edición, pegada a la hoja */}
+                  <div className="no-imprimir flex flex-wrap items-center gap-2 rounded-xl border border-linea bg-white p-2.5 shadow-sm">
+                    <button
+                      type="button"
+                      onClick={() => setEditando((v) => !v)}
+                      disabled={generando}
+                      className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[13.5px] font-bold transition disabled:opacity-50 ${
+                        editando ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-smt-azul text-white hover:bg-smt-oscuro"
+                      }`}
+                    >
+                      {editando ? <Check className="size-4" /> : <Pencil className="size-4" />}
+                      {editando ? "Terminar edición" : "Editar nota"}
+                    </button>
+                    {editadaAMano && !editando && (
+                      <button
+                        type="button"
+                        onClick={() => setNota(notaIA)}
+                        disabled={generando}
+                        title="Volver a la versión que redactó la IA"
+                        className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold text-gris transition hover:bg-slate-100 hover:text-tinta disabled:opacity-50"
+                      >
+                        <RotateCcw className="size-4" />
+                        Deshacer cambios
+                      </button>
+                    )}
+                    <p className="ml-auto text-[12.5px] text-gris">
+                      {editando
+                        ? "Escribí directamente sobre la hoja. El destinatario y la firma se cambian en «Cambiar datos»."
+                        : soloFaltaDestinatario
+                          ? "Falta el destinatario: completalo en «Cambiar datos»."
+                          : pendientes > 0
+                            ? `${pendientes === 1 ? "Falta 1 dato" : `Faltan ${pendientes} datos`}: tocá lo resaltado en amarillo para completarlo.`
+                            : "La nota está completa."}
+                    </p>
+                  </div>
+                  {/* Mientras la IA reescribe, la hoja no se toca: lo que se completara se perdería con su respuesta. */}
+                  <div
+                    className={`zona-hoja rounded-xl bg-slate-200/60 p-3 transition sm:p-6 ${generando ? "pointer-events-none opacity-40" : ""}`}
+                    aria-busy={generando}
+                  >
+                    <HojaNota
+                      nota={nota}
+                      enc={enc}
+                      editando={editando}
+                      alCambiar={setNota}
+                      alCompletarDato={generando ? undefined : completarUnDato}
+                    />
                   </div>
                   <p className="no-imprimir flex items-start gap-2 px-1 text-[12.5px] text-gris">
                     <ShieldCheck className="mt-0.5 size-4 shrink-0" />
@@ -388,22 +495,15 @@ export default function Generador() {
                 <section className="rounded-xl border border-linea bg-white p-4 shadow-sm">
                   <h2 className="text-[15px] font-extrabold text-tinta">Acciones</h2>
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <BotonAccion activo={editando} onClick={() => setEditando((v) => !v)} disabled={generando}>
-                      {editando ? <Check className="size-4" /> : <Pencil className="size-4" />}
-                      {editando ? "Listo" : "Editar texto"}
-                    </BotonAccion>
-                    <BotonAccion onClick={copiar} disabled={generando}>
+                    <BotonAccion onClick={() => exportar("copiar")} disabled={generando}>
                       {copiado ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
                       {copiado ? "Copiado" : "Copiar"}
                     </BotonAccion>
-                    <BotonAccion
-                      onClick={() => descargarDocx(nota, { ...enc, tipoNombre: nombreTipo(datos.tipo) })}
-                      disabled={generando}
-                    >
+                    <BotonAccion onClick={() => exportar("word")} disabled={generando}>
                       <FileDown className="size-4" />
                       Word
                     </BotonAccion>
-                    <BotonAccion onClick={imprimir} disabled={generando}>
+                    <BotonAccion onClick={() => exportar("imprimir")} disabled={generando}>
                       <Printer className="size-4" />
                       Imprimir / PDF
                     </BotonAccion>
@@ -411,17 +511,10 @@ export default function Generador() {
                       <Mail className="size-4" />
                       Correo
                     </BotonAccion>
-                    {editadaAMano && !editando ? (
-                      <BotonAccion onClick={() => setNota(notaIA)} disabled={generando} title="Volver a la versión de la IA">
-                        <RotateCcw className="size-4" />
-                        Deshacer cambios
-                      </BotonAccion>
-                    ) : (
-                      <BotonAccion onClick={() => irA("datos")} disabled={generando}>
-                        <ArrowLeft className="size-4" />
-                        Cambiar datos
-                      </BotonAccion>
-                    )}
+                    <BotonAccion onClick={() => irA("datos")} disabled={generando} className="col-span-2">
+                      <ArrowLeft className="size-4" />
+                      Cambiar datos (destinatario, firma, expediente)
+                    </BotonAccion>
                   </div>
 
                   {verCorreo && (
@@ -441,7 +534,7 @@ export default function Generador() {
                         <button
                           type="button"
                           disabled={!paraValido}
-                          onClick={() => enviarCorreo("gmail")}
+                          onClick={() => exportar("gmail")}
                           className="rounded-lg bg-smt-azul px-3 py-2 text-[13.5px] font-bold text-white transition hover:bg-smt-oscuro disabled:bg-slate-300"
                         >
                           Abrir en Gmail
@@ -449,7 +542,7 @@ export default function Generador() {
                         <button
                           type="button"
                           disabled={!paraValido}
-                          onClick={() => enviarCorreo("otro")}
+                          onClick={() => exportar("correo")}
                           className="rounded-lg border border-linea px-3 py-2 text-[13.5px] font-semibold text-tinta transition hover:bg-slate-50 disabled:opacity-50"
                         >
                           Otro programa
@@ -512,13 +605,142 @@ export default function Generador() {
                   </button>
                 </form>
 
-                <PanelRevision nota={nota} lineasArmadas={lineasArmadas} alIrADatos={() => irA("datos")} />
+                <PanelRevision
+                  nota={nota}
+                  lineasArmadas={lineasArmadas}
+                  alIrADatos={() => irA("datos")}
+                  alCompletarDato={completarUnDato}
+                  alResolverConIA={pendientesDeLaIA > 0 ? () => generar(AJUSTE_SIN_FALTANTES) : undefined}
+                  ocupado={generando}
+                />
               </aside>
             )}
           </div>
         </main>
       )}
+
+      {porExportar && nota && (
+        <AntesDeExportar
+          accion={NOMBRE_EXPORTACION[porExportar]}
+          faltantes={faltantesPendientes(nota, lineasArmadas)}
+          alCompletar={completarUnDato}
+          alIrADatos={() => {
+            setPorExportar(null);
+            irA("datos");
+          }}
+          alContinuar={continuarExportacion}
+          alResolverConIA={
+            pendientesDeLaIA > 0
+              ? () => {
+                  setPorExportar(null);
+                  generar(AJUSTE_SIN_FALTANTES);
+                }
+              : undefined
+          }
+          alCerrar={() => setPorExportar(null)}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * Aviso antes de sacar la nota (Word, PDF, copia o correo) cuando quedan datos
+ * sin completar: se pueden completar ahí mismo, seguir con líneas en blanco
+ * para completar a mano, o pedirle a la IA que redacte sin esos datos.
+ */
+function AntesDeExportar({
+  accion,
+  faltantes,
+  alCompletar,
+  alIrADatos,
+  alContinuar,
+  alResolverConIA,
+  alCerrar,
+}: {
+  accion: string;
+  faltantes: NotaGenerada["faltantes"];
+  alCompletar: (dato: string, valor: string) => void;
+  alIrADatos: () => void;
+  alContinuar: () => void;
+  /** Ausente cuando lo único pendiente es el destinatario: la IA no puede resolverlo. */
+  alResolverConIA?: () => void;
+  alCerrar: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (d && !d.open) d.showModal();
+  }, []);
+  const completa = faltantes.length === 0;
+
+  return (
+    <dialog
+      ref={ref}
+      onClose={alCerrar}
+      aria-labelledby="antes-de-exportar"
+      className="no-imprimir m-auto w-[min(560px,calc(100vw-2rem))] rounded-xl border border-linea bg-white p-0 text-texto shadow-[0_24px_64px_rgba(16,35,61,.28)] backdrop:bg-tinta/40"
+    >
+      <div className="p-5">
+        <h2 id="antes-de-exportar" className="text-[16px] font-extrabold text-tinta">
+          {completa
+            ? "La nota ya está completa"
+            : `Antes de ${accion}: ${faltantes.length === 1 ? "falta 1 dato" : `faltan ${faltantes.length} datos`}`}
+        </h2>
+        <p className="mt-1 text-[13px] text-gris">
+          {completa
+            ? "Ya no queda nada por completar."
+            : "En el documento final no sale el amarillo. Completalos acá o elegí cómo seguir."}
+        </p>
+
+        {!completa && (
+          <div className="mt-3 max-h-[50dvh] overflow-y-auto">
+            <CompletarDatos faltantes={faltantes} alCompletar={alCompletar} alIrADatos={alIrADatos} />
+          </div>
+        )}
+
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+          <button
+            type="button"
+            onClick={alCerrar}
+            className="rounded-lg px-3.5 py-2 text-[13.5px] font-semibold text-gris transition hover:bg-slate-100 hover:text-tinta"
+          >
+            Cancelar
+          </button>
+          {!completa && (
+            <>
+              {alResolverConIA && (
+                <button
+                  type="button"
+                  onClick={alResolverConIA}
+                  className="flex items-center justify-center gap-1.5 rounded-lg border border-linea px-3.5 py-2 text-[13.5px] font-semibold text-tinta transition hover:bg-slate-50"
+                >
+                  <Wand2 className="size-4" />
+                  Que la IA redacte sin esos datos
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={alContinuar}
+                className="rounded-lg border border-linea px-3.5 py-2 text-[13.5px] font-semibold text-tinta transition hover:bg-slate-50"
+              >
+                Seguir con líneas en blanco
+              </button>
+            </>
+          )}
+          {completa && (
+            <button
+              type="button"
+              autoFocus
+              onClick={alContinuar}
+              className="rounded-lg bg-smt-azul px-4 py-2 text-[13.5px] font-bold text-white transition hover:bg-smt-oscuro"
+            >
+              Continuar
+            </button>
+          )}
+        </div>
+      </div>
+    </dialog>
   );
 }
 
@@ -582,6 +804,7 @@ function Pasos({
 function BotonAccion({
   children,
   activo,
+  className = "",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { activo?: boolean }) {
   return (
@@ -592,7 +815,7 @@ function BotonAccion({
         activo
           ? "border-smt-azul bg-smt-azul text-white"
           : "border-linea bg-white text-tinta hover:border-slate-300 hover:bg-slate-50"
-      }`}
+      } ${className}`}
     >
       {children}
     </button>

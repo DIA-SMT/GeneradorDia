@@ -76,12 +76,15 @@ export function lineasDestinatario(enc: DatosEncabezado): string[] {
   return lineas;
 }
 
-/** Las líneas de datos debajo del destinatario: número de nota y expediente (si los hay) y referencia. */
-export function lineasDeDatos(nota: NotaGenerada, enc: DatosEncabezado): { etiqueta: string; texto: string }[] {
+/**
+ * Las líneas de datos debajo del destinatario: número de nota y expediente,
+ * sólo si se cargaron. La nota no lleva línea de «Referencia»: el asunto que
+ * escribe la IA se usa únicamente como asunto del correo y título del archivo.
+ */
+export function lineasDeDatos(enc: DatosEncabezado): { etiqueta: string; texto: string }[] {
   const lineas: { etiqueta: string; texto: string }[] = [];
   if (enc.numeroNota.trim()) lineas.push({ etiqueta: "Nota N°", texto: enc.numeroNota.trim() });
   if (enc.expediente.trim()) lineas.push({ etiqueta: "Expediente", texto: enc.expediente.trim() });
-  if (nota.referencia.trim()) lineas.push({ etiqueta: "Referencia", texto: nota.referencia.trim() });
   return lineas;
 }
 
@@ -112,9 +115,41 @@ export function numerarCuerpo(cuerpo: NotaGenerada["cuerpo"]): number[] {
   });
 }
 
-// ── Revisión y copia ───────────────────────────────────────────────────
+// ── Datos para completar ───────────────────────────────────────────────
 
 const normalizar = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+
+/** Lo que va en el producto final (Word, PDF, texto, correo) en lugar de un dato que no se completó. */
+export const BLANCO = "________________";
+
+/** Un texto con los datos sin completar convertidos en líneas en blanco, para completar a mano. */
+export function conBlancos(texto: string): string {
+  return texto.replace(MARCADOR, BLANCO);
+}
+
+/** "[[COMPLETAR: plazo en días]]" → "plazo en días". */
+export function datoDeMarcador(marcador: string): string {
+  return marcador.replace(/^\[\[COMPLETAR:\s*/, "").replace(/\s*\]\]$/, "");
+}
+
+/**
+ * Completa un dato faltante: reemplaza en toda la nota los marcadores de ese
+ * dato por el valor escrito (si el mismo dato aparece dos veces, se completa
+ * en los dos lugares).
+ */
+export function completarDato(nota: NotaGenerada, dato: string, valor: string): NotaGenerada {
+  const clave = normalizar(dato);
+  const reemplazar = (t: string) => t.replace(MARCADOR, (m, adentro: string) => (normalizar(adentro) === clave ? valor : m));
+  return {
+    ...nota,
+    referencia: reemplazar(nota.referencia),
+    cuerpo: nota.cuerpo.map((b) => ({ ...b, texto: reemplazar(b.texto) })),
+    cierre: reemplazar(nota.cierre),
+    faltantes: nota.faltantes.filter((f) => normalizar(f.dato) !== clave),
+  };
+}
+
+// ── Revisión y copia ───────────────────────────────────────────────────
 
 /**
  * Los datos que siguen pendientes: exactamente los marcadores que quedan en
@@ -123,7 +158,8 @@ const normalizar = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
  * las líneas que arma el sistema (por ejemplo, el bloque del destinatario).
  */
 export function faltantesPendientes(nota: NotaGenerada, extra: string[] = []): NotaGenerada["faltantes"] {
-  const todo = [...extra, nota.referencia, ...nota.cuerpo.map((b) => b.texto), nota.cierre].join("\n");
+  // La referencia no se imprime en la nota: un marcador ahí no cuenta (no habría dónde verlo para completarlo).
+  const todo = [...extra, ...nota.cuerpo.map((b) => b.texto), nota.cierre].join("\n");
   const motivos = new Map(nota.faltantes.map((f) => [normalizar(f.dato), f.motivo]));
   const vistos = new Set<string>();
   const pendientes: NotaGenerada["faltantes"] = [];
@@ -136,13 +172,21 @@ export function faltantesPendientes(nota: NotaGenerada, extra: string[] = []): N
   return pendientes;
 }
 
-/** La nota completa como texto plano, para copiar al portapapeles o pegar en un sistema de expedientes. */
+/**
+ * La nota completa como texto plano, para copiar al portapapeles o pegar en
+ * un sistema de expedientes. Los datos sin completar salen como líneas en blanco.
+ */
 export function notaComoTexto(nota: NotaGenerada, enc: DatosEncabezado): string {
+  return conBlancos(armarTexto(nota, enc));
+}
+
+function armarTexto(nota: NotaGenerada, enc: DatosEncabezado): string {
   const lineas: string[] = [];
   lineas.push(`San Miguel de Tucumán, ${fechaLarga(enc.fecha)}.`, "");
   lineas.push(...lineasDestinatario(enc), "");
-  for (const d of lineasDeDatos(nota, enc)) lineas.push(`${d.etiqueta}: ${d.texto}`);
-  lineas.push("");
+  const datos = lineasDeDatos(enc);
+  for (const d of datos) lineas.push(`${d.etiqueta}: ${d.texto}`);
+  if (datos.length > 0) lineas.push("");
   const numeros = numerarCuerpo(nota.cuerpo);
   let enLista = false;
   nota.cuerpo.forEach((b, i) => {

@@ -1,4 +1,5 @@
-import { AlertOctagon, AlertTriangle, CheckCircle2, Info, PenLine, Scale } from "lucide-react";
+import { AlertOctagon, AlertTriangle, CheckCircle2, Info, PenLine, Scale, Wand2 } from "lucide-react";
+import { CompletarDatos } from "@/components/CompletarDatos";
 import { faltantesPendientes } from "@/lib/nota/formato";
 import type { NotaGenerada } from "@/lib/nota/tipos";
 
@@ -17,13 +18,19 @@ export function PanelRevision({
   nota,
   lineasArmadas = [],
   alIrADatos,
+  alCompletarDato,
+  alResolverConIA,
+  ocupado = false,
 }: {
   nota: NotaGenerada;
   lineasArmadas?: string[];
   /** Lleva al formulario, para completar lo que arma el sistema (como el destinatario). */
   alIrADatos?: () => void;
+  alCompletarDato: (dato: string, valor: string) => void;
+  /** Pide a la IA que reescriba las frases sin los datos faltantes (ausente si sólo falta el destinatario). */
+  alResolverConIA?: () => void;
+  ocupado?: boolean;
 }) {
-  const destinatarioPendiente = lineasArmadas.some((l) => l.includes("[[COMPLETAR"));
   const advertencias = [...nota.advertencias].sort(
     (a, b) => ["alta", "media", "baja"].indexOf(a.nivel) - ["alta", "media", "baja"].indexOf(b.nivel),
   );
@@ -49,30 +56,21 @@ export function PanelRevision({
             <PenLine className="size-4" />
             {faltantes.length === 1 ? "1 dato para completar" : `${faltantes.length} datos para completar`}
           </h3>
-          <ul className="mt-1.5 space-y-1.5">
-            {faltantes.map((f, i) => (
-              <li key={i} className="rounded-lg border border-[#efdc6b] bg-[#fffbe0] px-3 py-2 text-[13px]">
-                <span className="font-semibold text-tinta">{f.dato}</span>
-                {f.motivo && <span className="text-texto"> · {f.motivo}</span>}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-1.5 text-[12px] text-gris">
-            Están resaltados en amarillo en la nota. Completalos con «Editar texto» o pedile a la IA que los incorpore.
+          <p className="mb-2 mt-1 text-[12px] text-gris">
+            Escribilos acá o tocá lo resaltado en la nota. En el Word y el PDF nunca sale el amarillo: lo que quede sin
+            completar sale como una línea en blanco.
           </p>
-          {destinatarioPendiente && (
-            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-semibold text-[#6b5600]">
-              El destinatario no se edita en la hoja: se completa en los datos de la nota.
-              {alIrADatos && (
-                <button
-                  type="button"
-                  onClick={alIrADatos}
-                  className="rounded-md border border-[#efdc6b] bg-white px-2 py-0.5 text-[12px] font-semibold text-tinta hover:bg-[#fffbe0]"
-                >
-                  Completar destinatario
-                </button>
-              )}
-            </p>
+          <CompletarDatos faltantes={faltantes} alCompletar={alCompletarDato} alIrADatos={alIrADatos} ocupado={ocupado} />
+          {alResolverConIA && (
+            <button
+              type="button"
+              onClick={alResolverConIA}
+              disabled={ocupado}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-linea px-3 py-2 text-[12.5px] font-semibold text-tinta transition hover:bg-slate-50 disabled:opacity-50"
+            >
+              <Wand2 className="size-3.5" />
+              No los tengo: que la IA redacte sin esos datos
+            </button>
           )}
         </div>
       )}

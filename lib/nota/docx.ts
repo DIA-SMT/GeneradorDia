@@ -1,4 +1,6 @@
 import {
+  BLANCO,
+  conBlancos,
   fechaLarga,
   lineaCargoFirma,
   lineasDeDatos,
@@ -29,16 +31,16 @@ export async function descargarDocx(
   const d = await import("docx");
   const mm = d.convertMillimetersToTwip;
 
+  // Un dato que no se completó sale como línea en blanco (para completar a mano), nunca resaltado.
   const corridas = (texto: string, extra: { bold?: boolean; tam?: number; color?: string } = {}) =>
     partirMarcadores(texto).map(
       (p) =>
         new d.TextRun({
-          text: p.texto,
+          text: p.marcador ? BLANCO : p.texto,
           font: FUENTE,
           size: extra.tam ?? TAM,
           bold: extra.bold,
           color: extra.color,
-          highlight: p.marcador ? "yellow" : undefined,
         }),
     );
 
@@ -155,8 +157,8 @@ export async function descargarDocx(
     ),
   );
 
-  // Número, expediente y referencia, en cuerpo chico.
-  const datos = lineasDeDatos(nota, enc);
+  // Número de nota y expediente (sólo si se cargaron), en cuerpo chico.
+  const datos = lineasDeDatos(enc);
   datos.forEach((dato, i) =>
     cuerpo.push(
       new d.Paragraph({
@@ -204,7 +206,7 @@ export async function descargarDocx(
 
   const documento = new d.Document({
     creator: "Generador de Notas · Dirección de IA · Municipalidad de San Miguel de Tucumán",
-    title: `${enc.tipoNombre}: ${nota.referencia}`,
+    title: `${enc.tipoNombre}: ${conBlancos(nota.referencia)}`,
     sections: [
       {
         properties: {
