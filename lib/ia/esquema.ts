@@ -14,8 +14,13 @@ import "server-only";
 export const ESQUEMA_NOTA = {
   type: "object",
   additionalProperties: false,
-  required: ["referencia", "cuerpo", "cierre", "faltantes", "advertencias", "normas_citadas"],
+  required: ["aclaracion_necesaria", "referencia", "cuerpo", "cierre", "faltantes", "advertencias", "normas_citadas"],
   properties: {
+    aclaracion_necesaria: {
+      type: "string",
+      description:
+        "Vacío casi siempre. Sólo si el pedido no dice lo esencial (qué se solicita, informa, notifica u ordena) o un dato esencial es ambiguo de forma que cambiaría el sentido de la nota: una única pregunta concreta para quien redacta, en español rioplatense (de vos). En ese caso, el resto de los campos va vacío.",
+    },
     referencia: {
       type: "string",
       description:

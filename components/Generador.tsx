@@ -8,6 +8,7 @@ import {
   FilePlus2,
   FileDown,
   Mail,
+  MessageCircleQuestion,
   Pencil,
   Printer,
   RotateCcw,
@@ -90,7 +91,9 @@ const NOMBRE_EXPORTACION: Record<Exportacion, string> = {
 type Estado =
   | { tipo: "inicial" }
   | { tipo: "generando"; corrida: number; fase: "analizando" | "redactando"; razonamiento: string; esAjuste: boolean }
-  | { tipo: "error"; mensaje: string };
+  | { tipo: "error"; mensaje: string }
+  /** La IA necesita una respuesta para poder redactar (si venía de un ajuste, se guarda la instrucción). */
+  | { tipo: "aclaracion"; pregunta: string; ajuste?: string };
 
 function estadoInicial(): DatosNota {
   let remitente: Partial<DatosNota> = {};
@@ -163,12 +166,17 @@ export default function Generador() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function generar(ajuste?: string) {
+  /**
+   * Redacta (o ajusta) la nota. `datosDelPedido` permite redactar con datos recién
+   * cambiados en el mismo clic (por ejemplo, al responder una aclaración), sin
+   * esperar a que el estado del formulario se actualice.
+   */
+  async function generar(ajuste?: string, datosDelPedido: DatosNota = datos) {
     cancelador.current?.abort();
     const control = new AbortController();
     cancelador.current = control;
     const esAjuste = Boolean(ajuste && nota);
-    const personasEnviadas = clavePersonas(datos);
+    const personasEnviadas = clavePersonas(datosDelPedido);
     setEditando(false);
     corridas.current += 1;
     setEstado({ tipo: "generando", corrida: corridas.current, fase: "analizando", razonamiento: "", esAjuste });
@@ -183,12 +191,21 @@ export default function Generador() {
 
     try {
       await pedirNota(
-        { datos, ajuste: esAjuste && nota ? { borrador: nota, instruccion: ajuste! } : undefined },
+        { datos: datosDelPedido, ajuste: esAjuste && nota ? { borrador: nota, instruccion: ajuste! } : undefined },
         (ev) => {
           if (ev.tipo === "fase") {
             setEstado((e) => (e.tipo === "generando" ? { ...e, fase: ev.fase } : e));
           } else if (ev.tipo === "razonamiento") {
             setEstado((e) => (e.tipo === "generando" ? { ...e, razonamiento: e.razonamiento + ev.texto } : e));
+          } else if (ev.tipo === "resultado" && ev.nota.aclaracion_necesaria.trim()) {
+            // La IA no redactó: le falta lo esencial y hace una pregunta. La nota anterior (si había) no se toca.
+            terminado = true;
+            setEstado({
+              tipo: "aclaracion",
+              pregunta: ev.nota.aclaracion_necesaria.trim(),
+              ajuste: esAjuste ? ajuste : undefined,
+            });
+            if (!nota) setVista("datos");
           } else if (ev.tipo === "resultado") {
             terminado = true;
             setNota(ev.nota);
@@ -207,6 +224,23 @@ export default function Generador() {
     } catch {
       if (!control.signal.aborted) fallar("No se pudo conectar con el servidor. Revisá la conexión.");
     }
+  }
+
+  /**
+   * Responde la pregunta de la IA y vuelve a redactar. En una nota nueva, la
+   * pregunta y la respuesta se suman al «Qué necesitás comunicar» (quedan a la
+   * vista en el formulario); en un ajuste, se suman a la instrucción.
+   */
+  function responderAclaracion(respuesta: string) {
+    if (estado.tipo !== "aclaracion") return;
+    const { pregunta, ajuste } = estado;
+    if (ajuste) {
+      generar(`${ajuste}. Aclaración de quien redacta («${pregunta}»): ${respuesta.trim()}`);
+      return;
+    }
+    const nuevos = { ...datos, motivo: `${datos.motivo.trim()}\n\n${pregunta} ${respuesta.trim()}` };
+    setDatos(nuevos);
+    generar(undefined, nuevos);
   }
 
   function cancelar() {
@@ -352,6 +386,16 @@ export default function Generador() {
     </div>
   );
 
+  const avisoAclaracion = estado.tipo === "aclaracion" && (
+    <PedidoDeAclaracion
+      key={estado.pregunta}
+      pregunta={estado.pregunta}
+      esAjuste={Boolean(estado.ajuste)}
+      alResponder={responderAclaracion}
+      alCerrar={() => setEstado({ tipo: "inicial" })}
+    />
+  );
+
   const pasos = (
     <Pasos
       vista={vista}
@@ -380,6 +424,7 @@ export default function Generador() {
         <main className="mx-auto max-w-[1080px] px-4 pb-8 pt-5 sm:px-6">
           {pasos}
           {avisoError}
+          {avisoAclaracion}
           <div className="mt-4">
             <CompletarDictando funcionarios={funcionarios} ocupado={generando} alCompletar={cambiar} />
           </div>
@@ -400,6 +445,7 @@ export default function Generador() {
         <main className="vista-nota mx-auto max-w-[1320px] px-4 pb-10 pt-5 sm:px-6">
           {pasos}
           {avisoError}
+          {avisoAclaracion}
 
           <div className="grilla-nota mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
             {/* Columna de la hoja */}
@@ -798,6 +844,92 @@ function Pasos({
       })}
       {extra && <div className="ml-auto">{extra}</div>}
     </nav>
+  );
+}
+
+/**
+ * La pregunta que hace la IA cuando el pedido no alcanza para redactar (por
+ * ejemplo, no dice qué se le solicita al área). Se responde acá y la nota se
+ * vuelve a pedir con esa respuesta.
+ */
+function PedidoDeAclaracion({
+  pregunta,
+  esAjuste,
+  alResponder,
+  alCerrar,
+}: {
+  pregunta: string;
+  esAjuste: boolean;
+  alResponder: (respuesta: string) => void;
+  alCerrar: () => void;
+}) {
+  const [respuesta, setRespuesta] = useState("");
+  const lista = respuesta.trim().length >= 2;
+
+  function enviar() {
+    if (lista) alResponder(respuesta);
+  }
+
+  return (
+    <section
+      aria-labelledby="titulo-aclaracion"
+      className="no-imprimir mt-4 rounded-xl border border-smt-azul/30 bg-[#f2f7fd] p-4 shadow-sm sm:p-5"
+    >
+      <div className="flex items-start gap-3">
+        <MessageCircleQuestion className="mt-0.5 size-6 shrink-0 text-smt-azul" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <h2 id="titulo-aclaracion" className="text-[12.5px] font-bold uppercase tracking-wide text-smt-azul">
+            {esAjuste ? "Antes de ajustar la nota, la IA necesita saber" : "Antes de redactar, la IA necesita saber"}
+          </h2>
+          <p className="mt-1 text-[16px] font-semibold leading-snug text-tinta">{pregunta}</p>
+          <form
+            className="mt-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              enviar();
+            }}
+          >
+            <label htmlFor="respuesta-aclaracion" className="sr-only">
+              Tu respuesta
+            </label>
+            <textarea
+              id="respuesta-aclaracion"
+              autoFocus
+              rows={2}
+              maxLength={600}
+              value={respuesta}
+              onChange={(e) => setRespuesta(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  enviar();
+                }
+              }}
+              placeholder="Tu respuesta"
+              className="w-full resize-y rounded-lg border border-linea bg-white px-3 py-2 text-[14.5px] leading-relaxed text-tinta placeholder:text-slate-400 transition focus:border-smt-azul focus:outline-none focus:ring-3 focus:ring-smt-azul/15"
+            />
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <button
+                type="submit"
+                disabled={!lista}
+                className="flex items-center gap-1.5 rounded-lg bg-smt-azul px-4 py-2.5 text-[14px] font-bold text-white shadow-sm transition hover:bg-smt-oscuro disabled:bg-slate-300"
+              >
+                <Wand2 className="size-4" />
+                {esAjuste ? "Responder y ajustar" : "Responder y redactar"}
+              </button>
+              <button type="button" onClick={alCerrar} className="text-[13px] font-semibold text-gris underline hover:text-tinta">
+                {esAjuste ? "Dejar la nota como estaba" : "Prefiero completarlo en el formulario"}
+              </button>
+            </div>
+            <p className="mt-2 text-[12.5px] text-gris">
+              {esAjuste
+                ? "Tu respuesta se suma a la instrucción de ajuste."
+                : "La pregunta y tu respuesta se suman a «Qué necesitás comunicar», así quedan a la vista."}
+            </p>
+          </form>
+        </div>
+      </div>
+    </section>
   );
 }
 

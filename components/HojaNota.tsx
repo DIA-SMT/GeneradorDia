@@ -234,15 +234,24 @@ function MarcadorEditable({ dato, alCompletar }: { dato: string; alCompletar: (d
   }
 
   if (!abierto) {
+    // Un <span> y no un <button>: un botón no se parte en dos renglones y, en un párrafo
+    // justificado, obliga a estirar los espacios del renglón anterior.
     return (
-      <button
-        type="button"
+      <span
+        role="button"
+        tabIndex={0}
         onClick={() => setAbierto(true)}
-        className="marcador cursor-pointer align-baseline transition hover:bg-[#ffe97a]"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setAbierto(true);
+          }
+        }}
+        className="marcador cursor-pointer transition [box-decoration-break:clone] [-webkit-box-decoration-break:clone] hover:bg-[#ffe97a] focus-visible:outline-2 focus-visible:outline-smt-azul"
         title="Tocá para completar este dato"
       >
         COMPLETAR: {dato}
-      </button>
+      </span>
     );
   }
 

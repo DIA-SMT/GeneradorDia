@@ -69,6 +69,8 @@ export type DatosNota = z.infer<typeof DatosNotaSchema>;
  * el sistema con los datos del formulario.
  */
 export const NotaGeneradaSchema = z.object({
+  /** Si viene con texto, la IA no redactó: necesita que quien redacta le responda esta pregunta. */
+  aclaracion_necesaria: z.string().default(""),
   referencia: z.string(),
   cuerpo: z.array(
     z.object({
