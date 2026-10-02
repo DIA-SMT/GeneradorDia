@@ -7,6 +7,7 @@ import {
   Copy,
   FilePlus2,
   FileDown,
+  FileText,
   Mail,
   MessageCircleQuestion,
   Pencil,
@@ -26,6 +27,7 @@ import { PanelRevision } from "@/components/PanelRevision";
 import { Progreso } from "@/components/Progreso";
 import { abrirCorreo, correoValido, enlaceGmail, enlaceMailto, imprimirComo } from "@/lib/nota/correo";
 import { descargarDocx, nombreArchivo } from "@/lib/nota/docx";
+import { descargarPdf, imprimirPdf } from "@/lib/nota/pdf";
 import {
   completarDato,
   conBlancos,
@@ -78,12 +80,13 @@ function clavePersonas(d: DatosNota): string {
 
 type Vista = "datos" | "nota";
 
-type Exportacion = "copiar" | "word" | "imprimir" | "gmail" | "correo";
+type Exportacion = "copiar" | "word" | "pdf" | "imprimir" | "gmail" | "correo";
 
 const NOMBRE_EXPORTACION: Record<Exportacion, string> = {
   copiar: "copiar la nota",
   word: "descargar el Word",
-  imprimir: "imprimir o guardar el PDF",
+  pdf: "descargar el PDF",
+  imprimir: "imprimir la nota",
   gmail: "abrir el correo",
   correo: "abrir el correo",
 };
@@ -124,6 +127,7 @@ export default function Generador() {
   const [porExportar, setPorExportar] = useState<Exportacion | null>(null);
   const [editando, setEditando] = useState(false);
   const [instruccion, setInstruccion] = useState("");
+  const [preparandoPdf, setPreparandoPdf] = useState<"pdf" | "imprimir" | null>(null);
   const [copiado, setCopiado] = useState(false);
   const [verCorreo, setVerCorreo] = useState(false);
   const [para, setPara] = useState("");
@@ -138,6 +142,23 @@ export default function Generador() {
     const antesDeImprimir = () => flushSync(() => setEditando(false));
     window.addEventListener("beforeprint", antesDeImprimir);
     return () => window.removeEventListener("beforeprint", antesDeImprimir);
+  }, []);
+
+  // Ctrl+P (o ⌘P) con una nota a la vista imprime su PDF, igual que el botón Imprimir, en
+  // lugar de la página: así tampoco sale el encabezado del navegador.
+  const imprimirConAtajo = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    imprimirConAtajo.current = vista === "nota" && nota && estado.tipo !== "generando" ? () => exportar("imprimir") : null;
+  });
+  useEffect(() => {
+    const alTeclear = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "p" && imprimirConAtajo.current) {
+        e.preventDefault();
+        imprimirConAtajo.current();
+      }
+    };
+    window.addEventListener("keydown", alTeclear);
+    return () => window.removeEventListener("keydown", alTeclear);
   }, []);
 
   useEffect(() => {
@@ -312,7 +333,7 @@ export default function Generador() {
     if (!nota) return;
     if (accion === "copiar") void copiar();
     else if (accion === "word") void descargarDocx(nota, { ...enc, tipoNombre: nombreTipo(datos.tipo) });
-    else if (accion === "imprimir") imprimir();
+    else if (accion === "pdf" || accion === "imprimir") void salidaPdf(accion);
     else enviarCorreo(accion === "gmail" ? "gmail" : "otro");
   }
 
@@ -345,10 +366,29 @@ export default function Generador() {
     }
   }
 
-  function imprimir() {
-    // En modo edición la hoja tiene recuadros de edición: se sale y se redibuja antes de imprimir.
-    if (editando) flushSync(() => setEditando(false));
-    imprimirComo(nombreArchivo({ ...enc, tipoNombre: nombreTipo(datos.tipo) }, "pdf").replace(/\.pdf$/, ""));
+  /**
+   * Imprimir y PDF salen del mismo PDF, armado con los datos de la nota (no con la
+   * página): así no lleva el encabezado y el pie que el navegador agrega al imprimir
+   * una página, y se achica lo justo para entrar en una hoja.
+   */
+  async function salidaPdf(accion: "pdf" | "imprimir") {
+    if (!nota || preparandoPdf) return;
+    const encPdf = { ...enc, tipoNombre: nombreTipo(datos.tipo) };
+    setPreparandoPdf(accion);
+    try {
+      if (accion === "pdf") await descargarPdf(nota, encPdf);
+      else await imprimirPdf(nota, encPdf);
+    } catch {
+      if (accion === "imprimir") {
+        // Último recurso: imprimir la página tal cual (sale con el encabezado del navegador).
+        if (editando) flushSync(() => setEditando(false));
+        imprimirComo(nombreArchivo(encPdf, "pdf").replace(/\.pdf$/, ""));
+      } else {
+        setEstado({ tipo: "error", mensaje: "No se pudo armar el PDF. Volvé a intentar o descargá el Word." });
+      }
+    } finally {
+      setPreparandoPdf(null);
+    }
   }
 
   function enviarCorreo(via: "gmail" | "otro") {
@@ -549,17 +589,25 @@ export default function Generador() {
                       <FileDown className="size-4" />
                       Word
                     </BotonAccion>
-                    <BotonAccion onClick={() => exportar("imprimir")} disabled={generando}>
+                    <BotonAccion onClick={() => exportar("pdf")} disabled={generando || preparandoPdf !== null}>
+                      <FileText className="size-4" />
+                      {preparandoPdf === "pdf" ? "Armando…" : "PDF"}
+                    </BotonAccion>
+                    <BotonAccion onClick={() => exportar("imprimir")} disabled={generando || preparandoPdf !== null}>
                       <Printer className="size-4" />
-                      Imprimir / PDF
+                      {preparandoPdf === "imprimir" ? "Preparando…" : "Imprimir"}
                     </BotonAccion>
                     <BotonAccion activo={verCorreo} onClick={alternarCorreo} disabled={generando}>
                       <Mail className="size-4" />
                       Correo
                     </BotonAccion>
-                    <BotonAccion onClick={() => irA("datos")} disabled={generando} className="col-span-2">
+                    <BotonAccion
+                      onClick={() => irA("datos")}
+                      disabled={generando}
+                      title="Destinatario, firma, número y expediente"
+                    >
                       <ArrowLeft className="size-4" />
-                      Cambiar datos (destinatario, firma, expediente)
+                      Cambiar datos
                     </BotonAccion>
                   </div>
 

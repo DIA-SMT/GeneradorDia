@@ -40,7 +40,10 @@ derivaciones, dictámenes básicos, solicitudes, respuestas y circulares. Direcc
   completar sale como una línea en blanco.
 - **Redacción con razonamiento**, hoja A4 con membrete, panel de revisión (datos faltantes y riesgos legales),
   botón «Editar nota» arriba de la hoja y ajustes con IA («más breve», «agregá que…»).
-- **Salida:** Word con membrete, impresión / PDF, copiar, y correo (abre Gmail u otro programa con la nota en el cuerpo).
+- **Salida:** Word con membrete, PDF, imprimir, copiar, y correo (abre Gmail u otro programa con la nota en el cuerpo).
+  Imprimir (y Ctrl+P) imprime el PDF de la nota, no la página: así no sale el encabezado ni el pie del navegador
+  (fecha, título, dirección y número de hoja). La nota se ajusta para entrar en una hoja; si ni así entra, sale en
+  varias con el cierre y la firma siempre juntos.
 
 El dictado usa el reconocimiento de voz del navegador (Chrome y Edge; en Firefox no aparece). Esos navegadores
 procesan el audio en servidores de Google o Microsoft: la interfaz lo avisa y sugiere escribir si hay datos sensibles.
@@ -100,6 +103,7 @@ app/api/generar/route.ts    Endpoint (Server-Sent Events) con límite por IP
 app/api/funcionarios/       Padrón de funcionarios (sólo nombre, cargo y área)
 components/                 Formulario, hoja A4, panel de revisión, progreso
 lib/nota/docx.ts            Exportación a Word con membrete
+lib/nota/pdf.ts             PDF de la nota (descargar e imprimir), ajustado a una hoja
 ```
 
 El prompt de sistema no lleva la fecha ni datos variables: así la API lo guarda en caché y cada nota sale

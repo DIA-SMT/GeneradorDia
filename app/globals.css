@@ -100,9 +100,12 @@ body {
 }
 
 /*
- * Impresión / "Guardar como PDF": sólo sale la hoja. Los márgenes van en
- * @page (y no como relleno de la hoja) para que se repitan en cada página
- * cuando la nota ocupa más de una.
+ * Impresión de la página desde el menú del navegador: sólo sale la hoja. Los
+ * botones Imprimir y PDF, y Ctrl+P, no usan esto: imprimen el PDF de la nota
+ * (lib/nota/pdf.ts), que no lleva el encabezado ni el pie del navegador.
+ *
+ * Los márgenes van en @page (y no como relleno de la hoja) para que se
+ * repitan en cada página cuando la nota ocupa más de una.
  */
 @page {
   size: A4;
@@ -142,6 +145,16 @@ body {
     padding: 0;
     box-shadow: none !important;
     font-size: 12pt;
+  }
+  /* El cierre y la firma no se parten ni quedan solos: si no entran, pasan a la hoja
+     siguiente con las últimas líneas del párrafo anterior. */
+  .cierre-y-firma {
+    break-inside: avoid;
+    break-before: avoid;
+  }
+  /* Un título de sección no queda solo al pie de una hoja. */
+  .titulo-nota {
+    break-after: avoid;
   }
   .membrete,
   .linea-smt {

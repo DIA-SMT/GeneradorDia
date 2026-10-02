@@ -118,21 +118,24 @@ export function HojaNota({ nota, enc, editando, alCambiar, alCompletarDato }: Pr
           );
         })}
 
-        {(nota.cierre || editando) && (
-          <Bloque
-            editando={editando}
-            texto={nota.cierre}
-            alCambiar={(v) => alCambiar({ ...nota, cierre: v })}
-            etiqueta="Cierre"
-          />
-        )}
-      </div>
+        {/* El cierre y la firma van juntos: al imprimir no se separan ni quedan solos en otra hoja. */}
+        <div className="cierre-y-firma">
+          {(nota.cierre || editando) && (
+            <Bloque
+              editando={editando}
+              texto={nota.cierre}
+              alCambiar={(v) => alCambiar({ ...nota, cierre: v })}
+              etiqueta="Cierre"
+            />
+          )}
 
-      {/* Firma, a la izquierda: línea, nombre y «Cargo - Área» */}
-      <div className="mt-[22mm] leading-snug">
-        <div className="mb-[2mm] w-[60mm] border-t border-black" />
-        {enc.remitenteNombre && <p className="text-[11pt]">{enc.remitenteNombre}</p>}
-        {cargoFirma && <p className="text-[9.5pt] text-[#333]">{cargoFirma}</p>}
+          {/* Firma, a la izquierda: línea, nombre y «Cargo - Área» */}
+          <div className="mt-[22mm] text-left leading-snug">
+            <div className="mb-[2mm] w-[60mm] border-t border-black" />
+            {enc.remitenteNombre && <p className="text-[11pt]">{enc.remitenteNombre}</p>}
+            {cargoFirma && <p className="text-[9.5pt] text-[#333]">{cargoFirma}</p>}
+          </div>
+        </div>
       </div>
     </article>
     </CompletarDato.Provider>
@@ -156,7 +159,7 @@ function BloqueDeCuerpo({
         editando={editando}
         texto={bloque.texto}
         alCambiar={alCambiar}
-        className="pt-[2mm] text-left font-bold"
+        className="titulo-nota pt-[2mm] text-left font-bold"
         etiqueta="Título"
       />
     );

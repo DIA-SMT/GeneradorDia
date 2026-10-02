@@ -55,11 +55,17 @@ export async function descargarDocx(
       color?: string;
       /** Interlineado en 240avos de línea (360 = 1,5). */
       interlineado?: number;
+      /** Que no quede separado del párrafo siguiente por un salto de página. */
+      conElSiguiente?: boolean;
+      /** Que el párrafo no se parta entre dos páginas. */
+      sinPartir?: boolean;
     } = {},
   ) =>
     new d.Paragraph({
       alignment: opciones.alineacion ?? d.AlignmentType.JUSTIFIED,
       spacing: { after: opciones.despues ?? 200, line: opciones.interlineado ?? 360 },
+      keepNext: opciones.conElSiguiente,
+      keepLines: opciones.sinPartir,
       children: corridas(texto, { bold: opciones.negrita, tam: opciones.tam, color: opciones.color }),
     });
 
@@ -194,6 +200,9 @@ export async function descargarDocx(
   );
 
   const numeros = numerarCuerpo(nota.cuerpo);
+  // El último bloque del cuerpo acompaña al cierre y la firma: si no entran en la página,
+  // pasan a la siguiente con sus últimas líneas y la firma nunca queda sola.
+  const ultimo = nota.cuerpo.findLastIndex((b) => b.texto.trim());
   for (const [i, b] of nota.cuerpo.entries()) {
     if (!b.texto.trim()) continue;
     if (b.tipo === "item") {
@@ -203,6 +212,7 @@ export async function descargarDocx(
           alignment: d.AlignmentType.JUSTIFIED,
           indent: { left: mm(20), hanging: mm(8) },
           spacing: { after: 120, line: 360 },
+          keepNext: i === ultimo,
           children: [new d.TextRun({ text: `${numero}.\t`, font: FUENTE, size: TAM }), ...corridas(b.texto)],
           tabStops: [{ type: d.TabStopType.LEFT, position: mm(20) }],
         }),
@@ -210,21 +220,28 @@ export async function descargarDocx(
       continue;
     }
     if (b.tipo === "titulo") {
-      cuerpo.push(parrafo(b.texto, { alineacion: d.AlignmentType.LEFT, negrita: true, despues: 120 }));
+      cuerpo.push(parrafo(b.texto, { alineacion: d.AlignmentType.LEFT, negrita: true, despues: 120, conElSiguiente: true }));
     } else {
-      cuerpo.push(parrafo(b.texto));
+      cuerpo.push(parrafo(b.texto, { conElSiguiente: i === ultimo }));
     }
   }
 
-  if (nota.cierre) cuerpo.push(parrafo(nota.cierre));
+  // El cierre y la firma van siempre juntos, en la misma página (keepNext encadena cada
+  // párrafo con el siguiente hasta la última línea de la firma).
+  if (nota.cierre) cuerpo.push(parrafo(nota.cierre, { conElSiguiente: true, sinPartir: true }));
 
   // Firma a la izquierda: línea, nombre y «Cargo - Área» en cuerpo chico.
   const izquierda = { alineacion: d.AlignmentType.LEFT, despues: 0, interlineado: 276 } as const;
-  cuerpo.push(new d.Paragraph({ spacing: { before: 1200 }, children: [] }));
-  cuerpo.push(parrafo("____________________________", izquierda));
-  if (enc.remitenteNombre) cuerpo.push(parrafo(enc.remitenteNombre, { ...izquierda, tam: 22 }));
   const cargoFirma = lineaCargoFirma(enc.remitenteCargo, enc.remitenteArea);
-  if (cargoFirma) cuerpo.push(parrafo(cargoFirma, { ...izquierda, tam: 19, color: "333333" }));
+  const lineasFirma = [
+    { texto: "____________________________", estilo: {} },
+    { texto: enc.remitenteNombre, estilo: { tam: 22 } },
+    { texto: cargoFirma, estilo: { tam: 19, color: "333333" } },
+  ].filter((l) => l.texto);
+  cuerpo.push(new d.Paragraph({ spacing: { before: 1200 }, keepNext: true, children: [] }));
+  lineasFirma.forEach((l, i) =>
+    cuerpo.push(parrafo(l.texto, { ...izquierda, ...l.estilo, conElSiguiente: i < lineasFirma.length - 1 })),
+  );
 
   const documento = new d.Document({
     creator: "Generador de Notas · Dirección de IA · Municipalidad de San Miguel de Tucumán",
