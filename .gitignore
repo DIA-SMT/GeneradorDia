@@ -1,0 +1,21 @@
+# dependencias
+/node_modules
+
+# next.js
+/.next/
+/out/
+/build
+next-env.d.ts
+*.tsbuildinfo
+
+# variables de entorno: NUNCA subir la clave de la IA
+.env
+.env.local
+.env*.local
+!.env.example
+
+# varios
+.DS_Store
+*.pem
+*.log
+npm-debug.log*

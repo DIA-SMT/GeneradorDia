@@ -1,0 +1,151 @@
+@import "tailwindcss";
+
+/* Identidad visual de la Municipalidad de San Miguel de Tucumán */
+@theme {
+  --color-smt-azul: #126ff5;
+  --color-smt-medio: #2589ea;
+  --color-smt-profundo: #28469f;
+  --color-smt-oscuro: #0d3fb0;
+  --color-smt-celeste: #3cb4f0;
+  --color-smt-amarillo: #f2d91c;
+  --color-tinta: #10233d;
+  --color-texto: #33414f;
+  --color-gris: #6b7885;
+  --color-linea: #e3e8ef;
+  --color-fondo: #f4f7fb;
+
+  --font-sans: "Segoe UI", "Helvetica Neue", Arial, "DejaVu Sans", sans-serif;
+  /* Fuente del cuerpo de la nota. Cambiarla acá la cambia en pantalla e impresión (el Word usa la de lib/nota/docx.ts). */
+  --font-nota: "Times New Roman", Times, "Liberation Serif", serif;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-fondo);
+  color: var(--color-texto);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.franja-smt {
+  background: linear-gradient(112deg, var(--color-smt-oscuro) 0%, var(--color-smt-azul) 55%, var(--color-smt-medio) 100%);
+}
+
+.linea-smt {
+  height: 4px;
+  background: linear-gradient(90deg, var(--color-smt-amarillo) 0 22%, var(--color-smt-celeste) 22% 100%);
+}
+
+@keyframes avance {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+/* La hoja A4 de la vista previa */
+.hoja {
+  font-family: var(--font-nota);
+  font-size: 12pt;
+  line-height: 1.5;
+  color: #111;
+  background: #fff;
+  width: 100%;
+  max-width: 210mm;
+  min-height: 297mm;
+  padding: 18mm 20mm 22mm 28mm;
+}
+
+@media (max-width: 640px) {
+  .hoja {
+    min-height: auto;
+    padding: 10mm 8mm 14mm 10mm;
+    font-size: 11pt;
+  }
+}
+
+.marcador {
+  background: #fff3a6;
+  box-shadow: 0 0 0 1px #e8cf3a inset;
+  border-radius: 2px;
+  padding: 0 2px;
+  font-family: var(--font-sans);
+  font-size: 0.82em;
+  font-weight: 600;
+  color: #6b5600;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.campo-edicion {
+  width: 100%;
+  resize: none;
+  overflow: hidden;
+  background: #f3f8ff;
+  outline: 1px dashed #9cc3f7;
+  border-radius: 2px;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+}
+
+.campo-edicion:focus {
+  outline: 2px solid var(--color-smt-azul);
+  background: #fff;
+}
+
+/*
+ * Impresión / "Guardar como PDF": sólo sale la hoja. Los márgenes van en
+ * @page (y no como relleno de la hoja) para que se repitan en cada página
+ * cuando la nota ocupa más de una.
+ */
+@page {
+  size: A4;
+  margin: 18mm 20mm 22mm 28mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+  .no-imprimir {
+    display: none !important;
+  }
+  /* Los contenedores de la vista no suman rellenos ni márgenes al papel. */
+  .vista-nota,
+  .grilla-nota,
+  .columna-hoja {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    gap: 0 !important;
+  }
+  .zona-hoja {
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    background: none !important;
+    opacity: 1 !important;
+  }
+  .hoja {
+    max-width: none;
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    box-shadow: none !important;
+    font-size: 12pt;
+  }
+  .membrete,
+  .linea-smt {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
