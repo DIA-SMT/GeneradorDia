@@ -2,7 +2,6 @@ import {
   BLANCO,
   conBlancos,
   fechaLarga,
-  firmaLaDIA,
   lineaCargoFirma,
   lineasDeDatos,
   lineasDestinatario,
@@ -71,14 +70,12 @@ export async function descargarDocx(
   } catch {
     logo = null;
   }
-  // Logo de la Dirección de IA (526 × 220 px), sólo en las notas que firma la Dirección.
+  // Logo de la Dirección de IA (526 × 220 px): va en todas las notas, firme quien firme.
   let logoDIA: ArrayBuffer | null = null;
-  if (firmaLaDIA(enc.remitenteArea)) {
-    try {
-      logoDIA = await (await fetch("/logo-ia.png")).arrayBuffer();
-    } catch {
-      logoDIA = null;
-    }
+  try {
+    logoDIA = await (await fetch("/logo-ia.png")).arrayBuffer();
+  } catch {
+    logoDIA = null;
   }
 
   const sinBordes = {

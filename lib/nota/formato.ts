@@ -89,15 +89,6 @@ export function lineasDeDatos(enc: DatosEncabezado): { etiqueta: string; texto: 
 }
 
 /**
- * ¿Firma la Dirección de Inteligencia Artificial? Entonces el membrete lleva
- * también su logo. Si firma otra área, el membrete queda sólo con el escudo
- * municipal: no corresponde el logo de la Dirección en una nota ajena.
- */
-export function firmaLaDIA(areaRemitente: string): boolean {
-  return /inteligencia\s+artificial/i.test(areaRemitente) || /^\s*(la\s+)?DIA\s*$/i.test(areaRemitente);
-}
-
-/**
  * La línea de cargo de la firma: «Cargo - Área». El Intendente firma sólo
  * con su cargo (la Intendencia no hace falta repetirla).
  */

@@ -5,7 +5,6 @@ import { createContext, useContext, useLayoutEffect, useRef, useState } from "re
 import {
   datoDeMarcador,
   fechaLarga,
-  firmaLaDIA,
   lineaCargoFirma,
   lineasDeDatos,
   lineasDestinatario,
@@ -65,16 +64,14 @@ export function HojaNota({ nota, enc, editando, alCambiar, alCompletarDato }: Pr
             </p>
             {enc.remitenteArea && <p className="mt-0.5 text-[9pt] text-gris">{enc.remitenteArea}</p>}
           </div>
-          {/* Logo de la Dirección de IA, sólo en las notas que firma la Dirección */}
-          {firmaLaDIA(enc.remitenteArea) && (
-            <Image
-              src="/logo-ia.png"
-              alt="Dirección de Inteligencia Artificial"
-              width={526}
-              height={220}
-              className="ml-auto h-[12mm] w-auto"
-            />
-          )}
+          {/* Logo de la Dirección de IA: va en todas las notas, firme quien firme */}
+          <Image
+            src="/logo-ia.png"
+            alt="Dirección de Inteligencia Artificial"
+            width={526}
+            height={220}
+            className="ml-auto h-[12mm] w-auto"
+          />
         </div>
         <div className="linea-smt mt-[3mm] h-[1.2mm]" />
       </header>
