@@ -1,11 +1,11 @@
 import type { Content, TDocumentDefinitions, TFontContainer } from "pdfmake/interfaces";
-import { nombreArchivo } from "./docx";
 import {
   conBlancos,
   fechaLarga,
   lineaCargoFirma,
   lineasDeDatos,
   lineasDestinatario,
+  nombreArchivo,
   numerarCuerpo,
   type DatosEncabezado,
 } from "./formato";
@@ -47,7 +47,13 @@ const GRIS = "#6b7885";
 const enTimes = (css: number) => css / 0.9;
 const enHelvetica = (css: number) => css / 0.925;
 
-/** Cuánto se achica la nota para que entre en una hoja; el primero es el tamaño normal. */
+/**
+ * Cuánto se achica la nota para que entre en una hoja; el primero es el tamaño
+ * normal. «letra», «espacio» y «margen» multiplican el tamaño de la letra, los
+ * espacios entre bloques y los márgenes de arriba y abajo; «interlineado» es
+ * como el de CSS (1,5 = una vez y media el tamaño de la letra). El Word usa
+ * las mismas medidas (ver docx.ts).
+ */
 const NIVELES = [
   { letra: 1, espacio: 1, interlineado: 1.5, margen: 1 },
   { letra: 1, espacio: 0.75, interlineado: 1.42, margen: 1 },
@@ -55,7 +61,8 @@ const NIVELES = [
   { letra: 0.93, espacio: 0.5, interlineado: 1.3, margen: 0.8 },
   { letra: 0.875, espacio: 0.4, interlineado: 1.25, margen: 0.7 },
 ] as const;
-type Nivel = (typeof NIVELES)[number];
+export type Medidas = (typeof NIVELES)[number];
+export const MEDIDAS_NORMALES: Medidas = NIVELES[0];
 
 /** El último párrafo acompaña al cierre y la firma si es corto (si es largo, dejaría un hueco grande). */
 const ULTIMO_PARRAFO_CON_LA_FIRMA = 700;
@@ -64,12 +71,32 @@ type Logos = { muni: string | null; dia: string | null };
 
 /** Arma el PDF de la nota y devuelve el archivo y cuántas hojas ocupa. */
 export async function armarPdf(nota: NotaGenerada, enc: Encabezado): Promise<{ blob: Blob; hojas: number }> {
+  const { blob, hojas } = await ajustarAUnaHoja(nota, enc, 0);
+  return { blob, hojas };
+}
+
+/**
+ * Las medidas con que la nota entra en una hoja, para el Word. `holguraMm`
+ * reserva ese espacio de más al pie al medir, porque Word puede cortar los
+ * renglones un poco distinto que el PDF.
+ */
+export async function medidasParaUnaHoja(nota: NotaGenerada, enc: Encabezado, holguraMm: number): Promise<Medidas> {
+  const conReserva = await ajustarAUnaHoja(nota, enc, holguraMm);
+  if (conReserva.hojas <= 1) return conReserva.medidas;
+  // Con la reserva no entra ni con lo más apretado; si sin la reserva entra (como el PDF), va lo más
+  // apretado posible, que es lo que más chances tiene de entrar en una hoja. Si no, tamaño normal.
+  const sinReserva = await ajustarAUnaHoja(nota, enc, 0);
+  return sinReserva.hojas <= 1 ? NIVELES[NIVELES.length - 1] : MEDIDAS_NORMALES;
+}
+
+async function ajustarAUnaHoja(nota: NotaGenerada, enc: Encabezado, holguraMm: number) {
   const [pdfMake, logos] = await Promise.all([cargarPdfMake(), cargarLogos()]);
 
-  const probar = async (nivel: Nivel) => {
+  const probar = async (medidas: Medidas) => {
     let hojas = 0;
-    const blob = await pdfMake.createPdf(definicion(nota, enc, nivel, logos, (n) => (hojas = n))).getBlob();
-    return { blob, hojas };
+    const definida = definicion(nota, enc, medidas, logos, holguraMm, (n) => (hojas = n));
+    const blob = await pdfMake.createPdf(definida).getBlob();
+    return { medidas, blob, hojas };
   };
 
   const normal = await probar(NIVELES[0]);
@@ -129,8 +156,9 @@ export async function imprimirPdf(nota: NotaGenerada, enc: Encabezado): Promise<
 function definicion(
   nota: NotaGenerada,
   enc: Encabezado,
-  n: Nivel,
+  n: Medidas,
   logos: Logos,
+  holguraMm: number,
   alContarHojas: (hojas: number) => void,
 ): TDocumentDefinitions {
   const pt = (tam: number) => tam * n.letra;
@@ -291,7 +319,7 @@ function definicion(
 
   return {
     pageSize: "A4",
-    pageMargins: [28 * MM, 18 * MM * n.margen, 20 * MM, 22 * MM * n.margen],
+    pageMargins: [28 * MM, 18 * MM * n.margen, 20 * MM, (22 * n.margen + holguraMm) * MM],
     info: {
       title: nombreArchivo(enc, "pdf").replace(/\.pdf$/, ""),
       author: "Municipalidad de San Miguel de Tucumán",

@@ -26,7 +26,7 @@ import { HojaNota } from "@/components/HojaNota";
 import { PanelRevision } from "@/components/PanelRevision";
 import { Progreso } from "@/components/Progreso";
 import { abrirCorreo, correoValido, enlaceGmail, enlaceMailto, imprimirComo } from "@/lib/nota/correo";
-import { descargarDocx, nombreArchivo } from "@/lib/nota/docx";
+import { descargarDocx } from "@/lib/nota/docx";
 import { descargarPdf, imprimirPdf } from "@/lib/nota/pdf";
 import {
   completarDato,
@@ -34,6 +34,7 @@ import {
   faltantesPendientes,
   hoyArgentina,
   lineasDestinatario,
+  nombreArchivo,
   notaComoTexto,
   type DatosEncabezado,
 } from "@/lib/nota/formato";
@@ -127,7 +128,7 @@ export default function Generador() {
   const [porExportar, setPorExportar] = useState<Exportacion | null>(null);
   const [editando, setEditando] = useState(false);
   const [instruccion, setInstruccion] = useState("");
-  const [preparandoPdf, setPreparandoPdf] = useState<"pdf" | "imprimir" | null>(null);
+  const [preparando, setPreparando] = useState<"word" | "pdf" | "imprimir" | null>(null);
   const [copiado, setCopiado] = useState(false);
   const [verCorreo, setVerCorreo] = useState(false);
   const [para, setPara] = useState("");
@@ -332,8 +333,7 @@ export default function Generador() {
   function ejecutar(accion: Exportacion) {
     if (!nota) return;
     if (accion === "copiar") void copiar();
-    else if (accion === "word") void descargarDocx(nota, { ...enc, tipoNombre: nombreTipo(datos.tipo) });
-    else if (accion === "pdf" || accion === "imprimir") void salidaPdf(accion);
+    else if (accion === "word" || accion === "pdf" || accion === "imprimir") void salidaArchivo(accion);
     else enviarCorreo(accion === "gmail" ? "gmail" : "otro");
   }
 
@@ -367,27 +367,29 @@ export default function Generador() {
   }
 
   /**
-   * Imprimir y PDF salen del mismo PDF, armado con los datos de la nota (no con la
-   * página): así no lleva el encabezado y el pie que el navegador agrega al imprimir
-   * una página, y se achica lo justo para entrar en una hoja.
+   * Word, PDF e Imprimir se arman con los datos de la nota y se achican lo justo
+   * para entrar en una hoja. Imprimir usa el PDF (no la página): así no lleva el
+   * encabezado y el pie que el navegador agrega al imprimir una página.
    */
-  async function salidaPdf(accion: "pdf" | "imprimir") {
-    if (!nota || preparandoPdf) return;
-    const encPdf = { ...enc, tipoNombre: nombreTipo(datos.tipo) };
-    setPreparandoPdf(accion);
+  async function salidaArchivo(accion: "word" | "pdf" | "imprimir") {
+    if (!nota || preparando) return;
+    const encArchivo = { ...enc, tipoNombre: nombreTipo(datos.tipo) };
+    setPreparando(accion);
     try {
-      if (accion === "pdf") await descargarPdf(nota, encPdf);
-      else await imprimirPdf(nota, encPdf);
+      if (accion === "word") await descargarDocx(nota, encArchivo);
+      else if (accion === "pdf") await descargarPdf(nota, encArchivo);
+      else await imprimirPdf(nota, encArchivo);
     } catch {
       if (accion === "imprimir") {
         // Último recurso: imprimir la página tal cual (sale con el encabezado del navegador).
         if (editando) flushSync(() => setEditando(false));
-        imprimirComo(nombreArchivo(encPdf, "pdf").replace(/\.pdf$/, ""));
+        imprimirComo(nombreArchivo(encArchivo, "pdf").replace(/\.pdf$/, ""));
       } else {
-        setEstado({ tipo: "error", mensaje: "No se pudo armar el PDF. Volvé a intentar o descargá el Word." });
+        const otro = accion === "word" ? "descargá el PDF" : "descargá el Word";
+        setEstado({ tipo: "error", mensaje: `No se pudo armar el archivo. Volvé a intentar o ${otro}.` });
       }
     } finally {
-      setPreparandoPdf(null);
+      setPreparando(null);
     }
   }
 
@@ -585,17 +587,17 @@ export default function Generador() {
                       {copiado ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
                       {copiado ? "Copiado" : "Copiar"}
                     </BotonAccion>
-                    <BotonAccion onClick={() => exportar("word")} disabled={generando}>
+                    <BotonAccion onClick={() => exportar("word")} disabled={generando || preparando !== null}>
                       <FileDown className="size-4" />
-                      Word
+                      {preparando === "word" ? "Armando…" : "Word"}
                     </BotonAccion>
-                    <BotonAccion onClick={() => exportar("pdf")} disabled={generando || preparandoPdf !== null}>
+                    <BotonAccion onClick={() => exportar("pdf")} disabled={generando || preparando !== null}>
                       <FileText className="size-4" />
-                      {preparandoPdf === "pdf" ? "Armando…" : "PDF"}
+                      {preparando === "pdf" ? "Armando…" : "PDF"}
                     </BotonAccion>
-                    <BotonAccion onClick={() => exportar("imprimir")} disabled={generando || preparandoPdf !== null}>
+                    <BotonAccion onClick={() => exportar("imprimir")} disabled={generando || preparando !== null}>
                       <Printer className="size-4" />
-                      {preparandoPdf === "imprimir" ? "Preparando…" : "Imprimir"}
+                      {preparando === "imprimir" ? "Preparando…" : "Imprimir"}
                     </BotonAccion>
                     <BotonAccion activo={verCorreo} onClick={alternarCorreo} disabled={generando}>
                       <Mail className="size-4" />

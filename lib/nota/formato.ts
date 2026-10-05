@@ -207,3 +207,19 @@ function armarTexto(nota: NotaGenerada, enc: DatosEncabezado): string {
   if (cargo) lineas.push(cargo);
   return lineas.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
+
+/** Nombre del archivo de la nota: «Nota_Tipo_Número_Fecha.ext», sin acentos ni espacios. */
+export function nombreArchivo(enc: DatosEncabezado & { tipoNombre: string }, extension: string): string {
+  const partes = [
+    "Nota",
+    enc.tipoNombre,
+    enc.numeroNota.trim() || enc.expediente.trim(),
+    enc.fecha,
+  ].filter(Boolean);
+  const base = partes
+    .join("_")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^\w.-]+/g, "_");
+  return `${base}.${extension}`;
+}

@@ -42,8 +42,9 @@ derivaciones, dictámenes básicos, solicitudes, respuestas y circulares. Direcc
   botón «Editar nota» arriba de la hoja y ajustes con IA («más breve», «agregá que…»).
 - **Salida:** Word con membrete, PDF, imprimir, copiar, y correo (abre Gmail u otro programa con la nota en el cuerpo).
   Imprimir (y Ctrl+P) imprime el PDF de la nota, no la página: así no sale el encabezado ni el pie del navegador
-  (fecha, título, dirección y número de hoja). La nota se ajusta para entrar en una hoja; si ni así entra, sale en
-  varias con el cierre y la firma siempre juntos.
+  (fecha, título, dirección y número de hoja). El PDF, la impresión y el Word se ajustan para entrar en una hoja
+  (se achican de a poco los espacios, el interlineado y la letra, hasta 10,5 pt); si ni así entra, salen en varias
+  hojas a tamaño normal, con el cierre y la firma siempre juntos.
 
 El dictado usa el reconocimiento de voz del navegador (Chrome y Edge; en Firefox no aparece). Esos navegadores
 procesan el audio en servidores de Google o Microsoft: la interfaz lo avisa y sugiere escribir si hay datos sensibles.
