@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AdjuntosSchema } from "./adjuntos";
 
 /**
  * Tipos de nota y forma de los datos. Este archivo lo usan el navegador y el
@@ -94,9 +95,10 @@ export const NotaGeneradaSchema = z.object({
 export type NotaGenerada = z.infer<typeof NotaGeneradaSchema>;
 export type BloqueCuerpo = NotaGenerada["cuerpo"][number];
 
-/** Pedido al endpoint: una nota nueva, o un ajuste sobre un borrador. */
+/** Pedido al endpoint: una nota nueva, o un ajuste sobre un borrador, con los archivos de contexto. */
 export const PedidoGeneracionSchema = z.object({
   datos: DatosNotaSchema,
+  adjuntos: AdjuntosSchema.default([]),
   ajuste: z
     .object({
       borrador: NotaGeneradaSchema,

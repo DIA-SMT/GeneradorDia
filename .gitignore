@@ -19,3 +19,6 @@ next-env.d.ts
 *.pem
 *.log
 npm-debug.log*
+
+# Recursos de pdf.js que copia scripts/copiar-pdfjs.mjs al correr dev o build
+/public/pdfjs/

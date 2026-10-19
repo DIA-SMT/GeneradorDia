@@ -25,6 +25,10 @@ derivaciones, dictámenes básicos, solicitudes, respuestas y circulares. Direcc
 - **«Contalo con tus palabras»:** se dicta por voz o se escribe de corrido y la IA completa el formulario
   (tipo, destinatario, quién firma, contenido, tono). La persona revisa y recién después redacta.
 - **Micrófono en el campo principal** para dictar directo al texto, sin IA de por medio.
+- **Archivos de contexto:** se adjuntan hasta 5 archivos (PDF, Word, imágenes o texto) con la nota que se
+  responde, el expediente o una resolución, y la IA los usa para redactar la nota y sus ajustes. Se leen en el
+  navegador: el texto viaja como texto y las páginas escaneadas o fotos como imágenes achicadas (el pedido queda
+  muy por debajo del máximo de 4,5 MB de Vercel). La aplicación no los guarda.
 - **Estructura oficial de las notas de la Municipalidad** (la misma del generador anterior): fecha arriba a la
   derecha; destinatario en negrita (nombre, área y «De la Municipalidad de San Miguel de Tucumán»); número de nota
   y expediente si los hay; apertura «En mi carácter de…, me dirijo a usted a fin de…»; cierre «Sin otro
@@ -95,6 +99,8 @@ lib/ia/marco-normativo.ts   Normas que la IA puede citar (VACÍO: lo carga Aseso
 lib/ia/esquema.ts           Esquema JSON que la API impone a la respuesta
 lib/ia/extraccion.ts        Prompt y esquema para completar el formulario desde un dictado
 lib/nota/dictado.ts         Dictado por voz (Web Speech API, es-AR)
+lib/nota/leer-archivo.ts    Lectura de adjuntos en el navegador (pdf.js, mammoth, lienzo para imágenes)
+lib/nota/adjuntos.ts        Formato y límites de los adjuntos (los valida también el servidor)
 lib/nota/padron.ts          Búsqueda del destinatario dictado en el padrón
 app/api/extraer/route.ts    Endpoint de extracción de campos
 lib/ia/generar.ts           Elige proveedor, valida la respuesta y traduce errores al castellano

@@ -1,7 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { ESFUERZO, proveedor } from "./cliente";
-import { ErrorGeneracion, mensajeUsuario, type Consulta, type Salida } from "./comun";
+import { ErrorGeneracion, mensajeUsuario, partesDeAdjuntos, type Consulta, type Salida } from "./comun";
 import { ESQUEMA_NOTA } from "./esquema";
 import { ESQUEMA_EXTRACCION, PROMPT_EXTRACCION } from "./extraccion";
 import { PROMPT_SISTEMA } from "./prompt-sistema";
@@ -41,6 +41,7 @@ export async function* generarNota(
 ): AsyncGenerator<EventoGeneracion> {
   const consulta: Consulta = {
     sistema: PROMPT_SISTEMA,
+    adjuntos: partesDeAdjuntos(pedido.adjuntos),
     usuario: mensajeUsuario(pedido),
     esquema: ESQUEMA_NOTA,
     nombreEsquema: "nota_administrativa",
@@ -58,7 +59,7 @@ export async function* generarNota(
   }
 
   console.info(
-    `[generar] ${pedido.datos.tipo}${pedido.ajuste ? " (ajuste)" : ""} · ${proveedor()} · ${salida.modelo} · ${salida.uso}`,
+    `[generar] ${pedido.datos.tipo}${pedido.ajuste ? " (ajuste)" : ""}${pedido.adjuntos.length ? ` · ${pedido.adjuntos.length} adjunto(s)` : ""} · ${proveedor()} · ${salida.modelo} · ${salida.uso}`,
   );
   yield { tipo: "resultado", nota: nota.data, modelo: salida.modelo };
 }

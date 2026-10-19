@@ -1,7 +1,25 @@
 import "server-only";
 import { MODELO_ANTHROPIC, getCliente } from "./cliente";
+import type Anthropic from "@anthropic-ai/sdk";
 import { ErrorGeneracion, MENSAJE_DEMASIADO_LARGA, MENSAJE_RECHAZO, type Consulta, type Salida } from "./comun";
 import type { EventoGeneracion } from "@/lib/nota/tipos";
+
+/**
+ * El mensaje del usuario: primero los archivos adjuntos (texto e imágenes) y al
+ * final el pedido. El último bloque de los adjuntos lleva la marca de caché,
+ * así un ajuste hecho enseguida no los vuelve a pagar enteros.
+ */
+function contenidoUsuario(c: Consulta): Anthropic.Beta.BetaContentBlockParam[] {
+  const adjuntos = (c.adjuntos ?? []).map(
+    (p): Anthropic.Beta.BetaContentBlockParam =>
+      p.tipo === "texto"
+        ? { type: "text", text: p.texto }
+        : { type: "image", source: { type: "base64", media_type: "image/jpeg", data: p.datos } },
+  );
+  const ultimo = adjuntos[adjuntos.length - 1];
+  if (ultimo && (ultimo.type === "text" || ultimo.type === "image")) ultimo.cache_control = { type: "ephemeral" };
+  return [...adjuntos, { type: "text", text: c.usuario }];
+}
 
 /** Consulta a la API de Anthropic con el SDK oficial, en streaming. */
 export async function* viaAnthropic(c: Consulta, signal?: AbortSignal): AsyncGenerator<EventoGeneracion, Salida> {
@@ -19,7 +37,7 @@ export async function* viaAnthropic(c: Consulta, signal?: AbortSignal): AsyncGen
         format: { type: "json_schema", schema: c.esquema },
       },
       system: [{ type: "text", text: c.sistema, cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: c.usuario }],
+      messages: [{ role: "user", content: contenidoUsuario(c) }],
     },
     { signal },
   );

@@ -9,6 +9,7 @@ import {
   FileDown,
   FileText,
   Mail,
+  Paperclip,
   MessageCircleQuestion,
   Pencil,
   Printer,
@@ -27,6 +28,8 @@ import { PanelRevision } from "@/components/PanelRevision";
 import { Progreso } from "@/components/Progreso";
 import { abrirCorreo, correoValido, enlaceGmail, enlaceMailto, imprimirComo } from "@/lib/nota/correo";
 import { descargarDocx } from "@/lib/nota/docx";
+import type { Adjunto } from "@/lib/nota/adjuntos";
+import { useArchivos } from "@/lib/nota/archivos";
 import { descargarPdf, imprimirPdf } from "@/lib/nota/pdf";
 import {
   completarDato,
@@ -71,6 +74,11 @@ const AJUSTE_DATOS_NUEVOS =
   "Cambiaron el destinatario o quien firma: actualizá la apertura, el cierre y toda mención a ellos según los datos actuales. No cambies el resto.";
 
 /** Lo que define a las personas de la nota: si cambia después de redactar, la apertura y el cierre pueden no coincidir. */
+/** Identifica el juego de archivos adjuntos con que se redactó la nota (para avisar si cambió). */
+function claveAdjuntos(adjuntos: Adjunto[]): string {
+  return adjuntos.map((a) => `${a.nombre}:${a.texto.length}:${a.imagenes.length}`).join("|");
+}
+
 function clavePersonas(d: DatosNota): string {
   return JSON.stringify(
     [d.tipo, d.ambito, d.destinatarioNombre, d.destinatarioCargo, d.destinatarioArea, d.remitenteNombre, d.remitenteCargo, d.remitenteArea].map(
@@ -125,10 +133,13 @@ export default function Generador() {
   const [nota, setNota] = useState<NotaGenerada | null>(null);
   const [notaIA, setNotaIA] = useState<NotaGenerada | null>(null);
   const [personasDeLaNota, setPersonasDeLaNota] = useState<string | null>(null);
+  const [adjuntosDeLaNota, setAdjuntosDeLaNota] = useState<string | null>(null);
   const [porExportar, setPorExportar] = useState<Exportacion | null>(null);
   const [editando, setEditando] = useState(false);
   const [instruccion, setInstruccion] = useState("");
   const [preparando, setPreparando] = useState<"word" | "pdf" | "imprimir" | null>(null);
+  // Archivos de contexto: viajan con cada pedido (la nota y sus ajustes).
+  const archivos = useArchivos();
   const [copiado, setCopiado] = useState(false);
   const [verCorreo, setVerCorreo] = useState(false);
   const [para, setPara] = useState("");
@@ -203,6 +214,10 @@ export default function Generador() {
     corridas.current += 1;
     setEstado({ tipo: "generando", corrida: corridas.current, fase: "analizando", razonamiento: "", esAjuste });
     irA("nota");
+    // Si todavía se está leyendo un archivo, se espera: un ajuste o una respuesta hechos
+    // mientras tanto no tienen que salir sin él.
+    const adjuntosEnviados = await archivos.esperar();
+    if (control.signal.aborted) return;
 
     let terminado = false;
     const fallar = (mensaje: string) => {
@@ -213,7 +228,11 @@ export default function Generador() {
 
     try {
       await pedirNota(
-        { datos: datosDelPedido, ajuste: esAjuste && nota ? { borrador: nota, instruccion: ajuste! } : undefined },
+        {
+          datos: datosDelPedido,
+          adjuntos: adjuntosEnviados,
+          ajuste: esAjuste && nota ? { borrador: nota, instruccion: ajuste! } : undefined,
+        },
         (ev) => {
           if (ev.tipo === "fase") {
             setEstado((e) => (e.tipo === "generando" ? { ...e, fase: ev.fase } : e));
@@ -233,6 +252,7 @@ export default function Generador() {
             setNota(ev.nota);
             setNotaIA(ev.nota);
             setPersonasDeLaNota(personasEnviadas);
+            setAdjuntosDeLaNota(claveAdjuntos(adjuntosEnviados));
             setInstruccion("");
             setEstado({ tipo: "inicial" });
           } else if (ev.tipo === "error") {
@@ -283,6 +303,8 @@ export default function Generador() {
     setNota(null);
     setNotaIA(null);
     setPersonasDeLaNota(null);
+    setAdjuntosDeLaNota(null);
+    archivos.limpiar();
     setEditando(false);
     setVerCorreo(false);
     setPara("");
@@ -412,6 +434,8 @@ export default function Generador() {
   // si después de redactar cambian el destinatario o quien firma, pueden dejar de coincidir.
   const desactualizada =
     Boolean(nota) && !generando && personasDeLaNota !== null && personasDeLaNota !== clavePersonas(datos);
+  const adjuntosCambiados =
+    Boolean(nota) && !generando && adjuntosDeLaNota !== null && adjuntosDeLaNota !== claveAdjuntos(archivos.adjuntos);
   const pendientes = nota ? faltantesPendientes(nota, lineasArmadas).length : 0;
   // Los que escribió la IA (sin contar el destinatario, que sale del formulario): sólo esos los puede resolver ella.
   const pendientesDeLaIA = nota ? faltantesPendientes(nota).length : 0;
@@ -478,6 +502,10 @@ export default function Generador() {
               generando={generando}
               hayNota={Boolean(nota)}
               alGenerar={() => generar()}
+              archivos={archivos.lista}
+              leyendoArchivos={archivos.leyendo}
+              alAgregarArchivos={archivos.agregar}
+              alQuitarArchivo={archivos.quitar}
               alLimpiar={nuevaNota}
               alVerNota={() => irA("nota")}
             />
@@ -664,6 +692,21 @@ export default function Generador() {
                   }}
                 >
                   <h2 className="text-[15px] font-extrabold text-tinta">Ajustar con IA</h2>
+                  {archivos.adjuntos.length > 0 && (
+                    <p className="mt-1 flex items-start gap-1.5 text-[12.5px] text-gris">
+                      <Paperclip className="mt-0.5 size-3.5 shrink-0" />
+                      <span className="min-w-0 break-words">
+                        Usa también {archivos.adjuntos.length === 1 ? "el archivo adjunto" : "los archivos adjuntos"}:{" "}
+                        {archivos.adjuntos.map((a) => a.nombre).join(", ")}.
+                      </span>
+                    </p>
+                  )}
+                  {adjuntosCambiados && (
+                    <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12.5px] text-amber-800">
+                      Cambiaste los archivos después de redactar. Los ajustes ya usan los nuevos; para rehacer toda la
+                      nota con ellos, andá a «Cambiar datos» y tocá «Redactar de nuevo».
+                    </p>
+                  )}
                   <textarea
                     value={instruccion}
                     onChange={(e) => setInstruccion(e.target.value)}

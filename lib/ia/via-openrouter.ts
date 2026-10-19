@@ -1,6 +1,6 @@
 import "server-only";
 import { MODELO_OPENROUTER } from "./cliente";
-import { ErrorGeneracion, MENSAJE_DEMASIADO_LARGA, MENSAJE_RECHAZO, type Consulta, type Salida } from "./comun";
+import { ErrorGeneracion, MENSAJE_DEMASIADO_LARGA, MENSAJE_RECHAZO, type Consulta, type Parte, type Salida } from "./comun";
 import type { EventoGeneracion } from "@/lib/nota/tipos";
 
 /**
@@ -45,6 +45,24 @@ type Fragmento = {
   };
 };
 
+/**
+ * El mensaje del usuario en el formato de OpenRouter: primero los archivos
+ * adjuntos (texto e imágenes) y al final el pedido. El último bloque de los
+ * adjuntos lleva la marca de caché, así un ajuste hecho enseguida no los
+ * vuelve a pagar enteros.
+ */
+function contenidoUsuario(c: Consulta) {
+  const adjuntos = (c.adjuntos ?? []).map((p: Parte) =>
+    p.tipo === "texto"
+      ? { type: "text" as const, text: p.texto }
+      : { type: "image_url" as const, image_url: { url: `data:image/jpeg;base64,${p.datos}` } },
+  );
+  if (!adjuntos.length) return c.usuario;
+  const ultimo = adjuntos[adjuntos.length - 1];
+  if (ultimo.type === "text") Object.assign(ultimo, { cache_control: { type: "ephemeral" } });
+  return [...adjuntos, { type: "text" as const, text: c.usuario }];
+}
+
 function detalleDeError(cuerpo: string): string {
   try {
     const j = JSON.parse(cuerpo) as { error?: { message?: string } };
@@ -86,7 +104,7 @@ export async function* viaOpenRouter(c: Consulta, signal?: AbortSignal): AsyncGe
       messages: [
         // Las instrucciones no cambian entre pedidos: se marcan para caché.
         { role: "system", content: [{ type: "text", text: c.sistema, cache_control: { type: "ephemeral" } }] },
-        { role: "user", content: c.usuario },
+        { role: "user", content: contenidoUsuario(c) },
       ],
     }),
   });

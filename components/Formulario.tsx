@@ -17,7 +17,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useId, useMemo, useState } from "react";
+import { ArchivosDeContexto } from "@/components/ArchivosDeContexto";
 import { Autocompletar } from "@/components/Autocompletar";
+import type { ArchivoCargado } from "@/lib/nota/archivos";
 import { sumarDictado, useDictado } from "@/lib/nota/dictado";
 import {
   esDelPadron,
@@ -66,12 +68,30 @@ type Props = {
   funcionarios: Funcionario[];
   generando: boolean;
   hayNota: boolean;
+  /** Archivos de contexto (ver ArchivosDeContexto). */
+  archivos: ArchivoCargado[];
+  leyendoArchivos: boolean;
+  alAgregarArchivos: (archivos: File[]) => void;
+  alQuitarArchivo: (id: string) => void;
   alGenerar: () => void;
   alLimpiar: () => void;
   alVerNota: () => void;
 };
 
-export function Formulario({ datos, cambiar, funcionarios, generando, hayNota, alGenerar, alLimpiar, alVerNota }: Props) {
+export function Formulario({
+  datos,
+  cambiar,
+  funcionarios,
+  generando,
+  hayNota,
+  archivos,
+  leyendoArchivos,
+  alAgregarArchivos,
+  alQuitarArchivo,
+  alGenerar,
+  alLimpiar,
+  alVerNota,
+}: Props) {
   const id = useId();
   const [verAntecedentes, setVerAntecedentes] = useState(Boolean(datos.antecedentes));
   const tipoActual = TIPOS_NOTA.find((t) => t.id === datos.tipo);
@@ -112,7 +132,7 @@ export function Formulario({ datos, cambiar, funcionarios, generando, hayNota, a
       className="no-imprimir flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (listo && !generando) alGenerar();
+        if (listo && !generando && !leyendoArchivos) alGenerar();
       }}
     >
       {/* Tipo de nota */}
@@ -332,6 +352,18 @@ export function Formulario({ datos, cambiar, funcionarios, generando, hayNota, a
             />
           )}
         </div>
+
+        <div className="mt-4 border-t border-linea pt-3">
+          <p className="mb-2 text-[13px] font-semibold text-tinta">
+            Archivos de contexto <span className="font-normal text-gris">(opcional)</span>
+          </p>
+          <ArchivosDeContexto
+            archivos={archivos}
+            alAgregar={alAgregarArchivos}
+            alQuitar={alQuitarArchivo}
+            deshabilitado={generando}
+          />
+        </div>
       </Tarjeta>
 
       {/* Documento y estilo */}
@@ -403,7 +435,11 @@ export function Formulario({ datos, cambiar, funcionarios, generando, hayNota, a
           <span className="hidden sm:inline">Limpiar</span>
         </button>
         <p className="hidden flex-1 text-[12.5px] text-gris md:block">
-          {listo ? "Todo listo para redactar." : "Contá qué necesitás comunicar para poder redactar."}
+          {!listo
+            ? "Contá qué necesitás comunicar para poder redactar."
+            : leyendoArchivos
+              ? "Leyendo los archivos adjuntos…"
+              : "Todo listo para redactar."}
         </p>
         <div className="ml-auto flex items-center gap-2">
           {hayNota && (
@@ -417,19 +453,22 @@ export function Formulario({ datos, cambiar, funcionarios, generando, hayNota, a
           )}
           <button
             type="submit"
-            disabled={!listo || generando}
+            disabled={!listo || generando || leyendoArchivos}
             className="flex items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-smt-azul px-4 py-2.5 text-[15px] font-bold text-white shadow-sm transition hover:bg-smt-oscuro disabled:cursor-not-allowed disabled:bg-slate-300 sm:px-5"
           >
-            {generando ? <Loader2 className="size-5 animate-spin" /> : <Sparkles className="size-5" />}
+            {generando || leyendoArchivos ? <Loader2 className="size-5 animate-spin" /> : <Sparkles className="size-5" />}
             {generando ? (
               "Redactando…"
+            ) : leyendoArchivos ? (
+              // También en el celular, donde no se ve el texto de la barra.
+              "Leyendo archivos…"
             ) : (
               <>
                 <span className="sm:hidden">Redactar</span>
                 <span className="hidden sm:inline">{hayNota ? "Redactar de nuevo" : "Redactar nota"}</span>
               </>
             )}
-            {!generando && <ArrowRight className="hidden size-4 sm:block" />}
+            {!generando && !leyendoArchivos && <ArrowRight className="hidden size-4 sm:block" />}
           </button>
         </div>
       </div>
